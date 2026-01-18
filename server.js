@@ -1,5 +1,4 @@
 const http = require('http');
-const https = require('https');
 const WebSocket = require('ws');
 
 const server = http.createServer((req, res) => {
@@ -11,28 +10,21 @@ const wss = new WebSocket.Server({ server });
 let rooms = {};
 
 // SETTINGS
-const SPAWN_DELAY = 2000; // Time between zombie spawns
+const SPAWN_DELAY = 2000;
 
 wss.on('connection', (ws) => {
     ws.on('message', (message) => {
         try {
             let parsed = JSON.parse(message);
             let type = parsed.type;
-            let payload = parsed.data; // The GamePayload object
+            let payload = parsed.data;
 
             // 1. CREATE ROOM
             if (type === "create") {
                 let code = Math.floor(1000 + Math.random() * 9000).toString();
                 rooms[code] = { 
-                    host: ws, 
-                    client: null, 
-                    gameActive: false,
-                    timer: null,
-                    wave: 1,
-                    zombiesToSend: 0,  
-                    zombiesSent: 0,    
-                    zombiesKilled: 0,  
-                    map: 0             
+                    host: ws, client: null, gameActive: false,
+                    timer: null, wave: 1, zombiesToSend: 0, zombiesSent: 0, zombiesKilled: 0, map: 0 
                 };
                 ws.room = code;
                 ws.isHost = true;
@@ -50,27 +42,18 @@ wss.on('connection', (ws) => {
                     ws.send(JSON.stringify({ type: "joined", side: "client" }));
                     rooms[code].host.send(JSON.stringify({ type: "joined", side: "host" }));
                     console.log(`Client joined ${code}`);
-                } else {
-                    ws.send(JSON.stringify({ type: "error", msg: "Invalid" }));
                 }
             }
 
-            // 3. START GAME REQUEST (*** FIXED ***)
+            // 3. START GAME (FIXED)
             else if (type === "start_request") {
                 if (ws.room && rooms[ws.room] && ws.isHost) {
                     let room = rooms[ws.room];
-                    room.map = payload.map; // SAVE THE MAP SELECTION
-
-                    // *** FIX: SEND THE "START" COMMAND TO SWITCH SCENES ***
-                    let startMsg = JSON.stringify({ 
-                        type: "game", 
-                        data: { subtype: "start", map: room.map } 
-                    });
-                    
+                    room.map = payload.map;
+                    // Tell both players to switch to Playing State
+                    let startMsg = JSON.stringify({ type: "game", data: { subtype: "start", map: room.map } });
                     room.host.send(startMsg);
                     if (room.client) room.client.send(startMsg);
-
-                    // NOW START THE WAVE LOGIC
                     startWave(room, 1);
                 }
             }
@@ -80,23 +63,17 @@ wss.on('connection', (ws) => {
                 if (ws.room && rooms[ws.room]) {
                     let room = rooms[ws.room];
 
-                    // ** ZOMBIE KILLED LOGIC **
+                    // SYNC KILLS
                     if (payload.subtype === "zombie_killed") {
                         room.zombiesKilled++;
-                        // CHECK WAVE COMPLETE
                         if (room.zombiesKilled >= room.zombiesToSend) {
-                            // Wave Cleared! Wait 3 seconds then start next.
-                            setTimeout(() => {
-                                startWave(room, room.wave + 1);
-                            }, 3000);
+                            setTimeout(() => { startWave(room, room.wave + 1); }, 3000);
                         }
                     }
-                     
-                    // Relay packet to other player
+                    
+                    // RELAY EVERYTHING TO OTHER PLAYER
                     let target = ws.isHost ? room.client : room.host;
-                    if (target && target.readyState === WebSocket.OPEN) {
-                        target.send(message); 
-                    }
+                    if (target && target.readyState === WebSocket.OPEN) target.send(message);
                 }
             }
 
@@ -115,20 +92,14 @@ wss.on('connection', (ws) => {
 
 function startWave(room, waveNum) {
     room.wave = waveNum;
-    room.zombiesToSend = 10 + (waveNum * 5); 
+    room.zombiesToSend = 10 + (waveNum * 5);
     room.zombiesSent = 0;
     room.zombiesKilled = 0;
-    room.gameActive = true;
-
-    // Notify Players (Updates Wave Number on HUD)
-    let msg = JSON.stringify({ 
-        type: "game", 
-        data: { subtype: "new_wave", map: room.map, wave: room.wave } 
-    });
+    
+    let msg = JSON.stringify({ type: "game", data: { subtype: "new_wave", wave: room.wave } });
     room.host.send(msg);
     if (room.client) room.client.send(msg);
 
-    // Start Spawner
     clearInterval(room.timer);
     room.timer = setInterval(() => {
         if (room.zombiesSent < room.zombiesToSend) {
@@ -140,30 +111,14 @@ function startWave(room, waveNum) {
 
 function spawnZombie(room) {
     let axis = Math.random() > 0.5 ? 'x' : 'y';
-    let x, y;
-    if (axis === 'x') {
-        x = Math.random() * 1280;
-        y = Math.random() > 0.5 ? -50 : 800;
-    } else {
-        x = Math.random() > 0.5 ? -50 : 1300;
-        y = Math.random() * 768;
-    }
-
-    let zType = 0; 
-    if (room.map === 1) { 
-        zType = Math.random() > 0.7 ? 1 : 0; 
-    }
+    let x = (axis === 'x') ? Math.random() * 1280 : (Math.random() > 0.5 ? -50 : 1300);
+    let y = (axis === 'x') ? (Math.random() > 0.5 ? -50 : 800) : Math.random() * 768;
+    let zType = (room.map === 1 && Math.random() > 0.7) ? 1 : 0;
 
     let payload = JSON.stringify({
         type: "game",
-        data: {
-            subtype: "server_spawn",
-            x: x, y: y,
-            zId: Math.floor(Math.random() * 999999),
-            zType: zType
-        }
+        data: { subtype: "server_spawn", x: x, y: y, zId: Math.floor(Math.random() * 999999), zType: zType }
     });
-
     room.host.send(payload);
     if (room.client) room.client.send(payload);
 }
