@@ -29,10 +29,10 @@ wss.on('connection', (ws) => {
                     gameActive: false,
                     timer: null,
                     wave: 1,
-                    zombiesToSend: 0,  // How many we need to spawn this wave
-                    zombiesSent: 0,    // How many we have spawned
-                    zombiesKilled: 0,  // How many died
-                    map: 0             // 0 = Field, 1 = Desert
+                    zombiesToSend: 0,  
+                    zombiesSent: 0,    
+                    zombiesKilled: 0,  
+                    map: 0             
                 };
                 ws.room = code;
                 ws.isHost = true;
@@ -55,11 +55,22 @@ wss.on('connection', (ws) => {
                 }
             }
 
-            // 3. START GAME REQUEST
+            // 3. START GAME REQUEST (*** FIXED ***)
             else if (type === "start_request") {
                 if (ws.room && rooms[ws.room] && ws.isHost) {
                     let room = rooms[ws.room];
                     room.map = payload.map; // SAVE THE MAP SELECTION
+
+                    // *** FIX: SEND THE "START" COMMAND TO SWITCH SCENES ***
+                    let startMsg = JSON.stringify({ 
+                        type: "game", 
+                        data: { subtype: "start", map: room.map } 
+                    });
+                    
+                    room.host.send(startMsg);
+                    if (room.client) room.client.send(startMsg);
+
+                    // NOW START THE WAVE LOGIC
                     startWave(room, 1);
                 }
             }
@@ -80,7 +91,7 @@ wss.on('connection', (ws) => {
                             }, 3000);
                         }
                     }
-                    
+                     
                     // Relay packet to other player
                     let target = ws.isHost ? room.client : room.host;
                     if (target && target.readyState === WebSocket.OPEN) {
@@ -104,12 +115,12 @@ wss.on('connection', (ws) => {
 
 function startWave(room, waveNum) {
     room.wave = waveNum;
-    room.zombiesToSend = 10 + (waveNum * 5); // Example: Wave 1 = 15, Wave 2 = 20
+    room.zombiesToSend = 10 + (waveNum * 5); 
     room.zombiesSent = 0;
     room.zombiesKilled = 0;
     room.gameActive = true;
 
-    // Notify Players
+    // Notify Players (Updates Wave Number on HUD)
     let msg = JSON.stringify({ 
         type: "game", 
         data: { subtype: "new_wave", map: room.map, wave: room.wave } 
@@ -128,7 +139,6 @@ function startWave(room, waveNum) {
 }
 
 function spawnZombie(room) {
-    // Generate Position
     let axis = Math.random() > 0.5 ? 'x' : 'y';
     let x, y;
     if (axis === 'x') {
@@ -139,12 +149,10 @@ function spawnZombie(room) {
         y = Math.random() * 768;
     }
 
-    // *** MAP LOGIC FIX ***
-    let zType = 0; // Default Zombie
-    if (room.map === 1) { // 1 = Desert
-        zType = Math.random() > 0.7 ? 1 : 0; // 30% chance of Skeleton in Desert
+    let zType = 0; 
+    if (room.map === 1) { 
+        zType = Math.random() > 0.7 ? 1 : 0; 
     }
-    // If room.map === 0 (Field), zType stays 0.
 
     let payload = JSON.stringify({
         type: "game",
