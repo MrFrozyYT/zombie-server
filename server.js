@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https'); // Added for pinging external Render URL
 const WebSocket = require('ws');
 
 const server = http.createServer((req, res) => {
@@ -59,7 +60,7 @@ wss.on('connection', (ws) => {
                 }
             }
 
-            // 4. RESTART GAME (*** NEW FIX ***)
+            // 4. RESTART GAME
             else if (type === "restart") {
                 if (ws.room && rooms[ws.room] && ws.isHost) {
                     let room = rooms[ws.room];
@@ -143,6 +144,25 @@ function spawnZombie(room) {
     room.host.send(payload);
     if (room.client) room.client.send(payload);
 }
+
+// --- KEEP AWAKE LOGIC FOR RENDER ---
+// Ping the server every 10 minutes (600,000 ms)
+setInterval(() => {
+    // Render sets RENDER_EXTERNAL_URL environment variable automatically
+    const url = process.env.RENDER_EXTERNAL_URL;
+    
+    if (url) {
+        console.log(`Pinging ${url} to stay awake...`);
+        https.get(url, (res) => {
+            // Just consume the response so the event loop is happy
+            res.on('data', () => {});
+        }).on('error', (err) => {
+            console.error(`Ping failed: ${err.message}`);
+        });
+    } else {
+        console.log("No RENDER_EXTERNAL_URL found, skipping ping (Localhost?)");
+    }
+}, 600000); 
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server on ${PORT}`));
