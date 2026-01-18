@@ -49,9 +49,8 @@ wss.on('connection', (ws) => {
             else if (type === "start_request") {
                 if (ws.room && rooms[ws.room] && ws.isHost) {
                     let room = rooms[ws.room];
-                    room.map = payload.map; // 0 = Field, 1 = Desert
+                    room.map = payload.map; 
                     
-                    // Tell both players to switch to Playing State
                     let startMsg = JSON.stringify({ type: "game", data: { subtype: "start", map: room.map } });
                     room.host.send(startMsg);
                     if (room.client) room.client.send(startMsg);
@@ -60,12 +59,32 @@ wss.on('connection', (ws) => {
                 }
             }
 
-            // 4. GAMEPLAY RELAY
+            // 4. RESTART GAME (*** NEW FIX ***)
+            else if (type === "restart") {
+                if (ws.room && rooms[ws.room] && ws.isHost) {
+                    let room = rooms[ws.room];
+                    
+                    // Reset Server Side Stats
+                    room.wave = 1;
+                    room.zombiesToSend = 0;
+                    room.zombiesSent = 0;
+                    room.zombiesKilled = 0;
+
+                    // Tell clients to respawn
+                    let restartMsg = JSON.stringify({ type: "game", data: { subtype: "restart" } });
+                    room.host.send(restartMsg);
+                    if (room.client) room.client.send(restartMsg);
+
+                    // Start Wave 1 immediately
+                    startWave(room, 1);
+                }
+            }
+
+            // 5. GAMEPLAY RELAY
             else if (type === "game") {
                 if (ws.room && rooms[ws.room]) {
                     let room = rooms[ws.room];
 
-                    // SYNC KILLS
                     if (payload.subtype === "zombie_killed") {
                         room.zombiesKilled++;
                         if (room.zombiesKilled >= room.zombiesToSend) {
@@ -73,7 +92,6 @@ wss.on('connection', (ws) => {
                         }
                     }
                     
-                    // RELAY EVERYTHING TO OTHER PLAYER
                     let target = ws.isHost ? room.client : room.host;
                     if (target && target.readyState === WebSocket.OPEN) target.send(message);
                 }
@@ -116,10 +134,7 @@ function spawnZombie(room) {
     let x = (axis === 'x') ? Math.random() * 1280 : (Math.random() > 0.5 ? -50 : 1300);
     let y = (axis === 'x') ? (Math.random() > 0.5 ? -50 : 800) : Math.random() * 768;
     
-    // *** FIX: STRICT MAP ENEMY TYPES ***
-    // Map 0 (Field) = 0 (Zombie)
-    // Map 1 (Desert) = 1 (Skeleton)
-    let zType = (room.map === 1) ? 1 : 0;
+    let zType = (room.map === 1) ? 1 : 0; // Map 1 = Skeleton
 
     let payload = JSON.stringify({
         type: "game",
