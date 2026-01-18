@@ -45,15 +45,17 @@ wss.on('connection', (ws) => {
                 }
             }
 
-            // 3. START GAME (FIXED)
+            // 3. START GAME
             else if (type === "start_request") {
                 if (ws.room && rooms[ws.room] && ws.isHost) {
                     let room = rooms[ws.room];
-                    room.map = payload.map;
+                    room.map = payload.map; // 0 = Field, 1 = Desert
+                    
                     // Tell both players to switch to Playing State
                     let startMsg = JSON.stringify({ type: "game", data: { subtype: "start", map: room.map } });
                     room.host.send(startMsg);
                     if (room.client) room.client.send(startMsg);
+                    
                     startWave(room, 1);
                 }
             }
@@ -113,7 +115,11 @@ function spawnZombie(room) {
     let axis = Math.random() > 0.5 ? 'x' : 'y';
     let x = (axis === 'x') ? Math.random() * 1280 : (Math.random() > 0.5 ? -50 : 1300);
     let y = (axis === 'x') ? (Math.random() > 0.5 ? -50 : 800) : Math.random() * 768;
-    let zType = (room.map === 1 && Math.random() > 0.7) ? 1 : 0;
+    
+    // *** FIX: STRICT MAP ENEMY TYPES ***
+    // Map 0 (Field) = 0 (Zombie)
+    // Map 1 (Desert) = 1 (Skeleton)
+    let zType = (room.map === 1) ? 1 : 0;
 
     let payload = JSON.stringify({
         type: "game",
