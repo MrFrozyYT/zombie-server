@@ -135,7 +135,10 @@ function spawnZombie(room) {
     let x = (axis === 'x') ? Math.random() * 1280 : (Math.random() > 0.5 ? -50 : 1300);
     let y = (axis === 'x') ? (Math.random() > 0.5 ? -50 : 800) : Math.random() * 768;
     
-    let zType = (room.map === 1) ? 1 : 0; // Map 1 = Skeleton
+    // --- UPDATED LOGIC HERE ---
+    let zType = 0; // Default = Zombie (Field)
+    if (room.map === 1) zType = 1;      // Map 1 = Skeleton (Desert)
+    else if (room.map === 2) zType = 2; // Map 2 = Golem (Snow)
 
     let payload = JSON.stringify({
         type: "game",
